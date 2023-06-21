@@ -42,17 +42,17 @@ data Foo a b = MkFoo {unBar :: a, unBaz :: (b, b), unBoo :: a} deriving (Eq, Gen
 compOnFreshAlloc :: IO String
 compOnFreshAlloc = do
   let actual :: Ur (Int, Int)
-      !actual = withRegion $ \r -> case dup2 r of
+      !actual = withRegion $ \(r :: RegionToken r) -> case dup2 r of
         (r', r'') ->
           complete $
             (alloc r')
               <&> ( \dp ->
-                      case dp <| C @"(,)" of
+                      case (dp & fill @'(,)) of
                         (dl, dr) ->
-                          dl <|.. 1 `lseq`
+                          dl & fillLeaf 1 `lseq`
                             dr
-                              <|. (alloc r'')
-                              <|.. 2
+                              & fillComp (alloc r'')
+                              & fillLeaf 2
                   )
       expected :: Ur (Int, Int)
       !expected = Ur (1, 2)
@@ -68,12 +68,12 @@ compOnUsedAlloc = do
           complete $
             (alloc r')
               <&> ( \dp ->
-                      case dp <| C @"(,)" of
+                      case dp & fill @'(,) of
                         (dl, dr) ->
-                          dl <|.. 1 `lseq`
+                          dl & fillLeaf 1 `lseq`
                             dr
-                              <|. ((alloc r'') <&> (\dp' -> case dp' <| C @"(,)" of (dr1, dr2) -> dr1 <|.. 2 `lseq` dr2))
-                              <|.. 3
+                              & fillComp ((alloc r'') <&> (\dp' -> case dp' & fill @'(,) of (dr1, dr2) -> dr1 & fillLeaf 2 `lseq` dr2))
+                              & fillLeaf 3
                   )
       expected :: Ur (Int, (Int, Int))
       !expected = Ur (1, (2, 3))
@@ -88,13 +88,13 @@ fillCustomDataAndExtract = do
         completeExtract $
           (alloc r)
             <&> ( \d ->
-                    case d <| C @"MkFoo" of
+                    case d & fill @'MkFoo of
                       (dBar, dBaz, dBoo) ->
-                        dBar <|.. 1
-                          `lseq` ( case dBaz <| C @"(,)" of
-                                     (dl, dr) -> dl <|.. 'a' `lseq` dr <|.. 'b'
+                        dBar & fillLeaf 1
+                          `lseq` ( case dBaz & fill @'(,) of
+                                     (dl, dr) -> dl & fillLeaf 'a' `lseq` dr & fillLeaf 'b'
                                  )
-                          `lseq` dBoo <|.. 2
+                          `lseq` dBoo & fillLeaf 2
                           `lseq` Ur 14
                 )
       expected :: Ur (Foo Int Char, Int)

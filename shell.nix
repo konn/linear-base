@@ -1,4 +1,4 @@
-{ system ? builtins.currentSystem, sources ? import ./nix/sources.nix, ghcVersion ? "962" }:
+{ system ? builtins.currentSystem, sources ? import ./nix/sources.nix, ghcVersion ? "961" }:
 
 let
   selectHls = self: super: {
@@ -27,7 +27,7 @@ mkShell {
   NIX_PATH = "nixpkgs=${pkgs.path}";
   CONFIGURE_ARGS = [
     "--with-gmp-includes=${gmp.dev}/include"
-    "--with-gmp-libraries=${gmp}/lib"
+    "--with-gmp-libraries=${gmp.out}/lib"
     "--with-curses-includes=${ncurses.dev}/include"
     "--with-curses-libraries=${ncurses.out}/lib"
     "--with-libnuma-includes=${numactl}/include"

@@ -137,21 +137,21 @@ defaultSExpr = SInteger 0
 
 readStringUsingDest :: forall r. (RegionContext r) => Dest r String %1 -> Bool -> String -> Either (Ur SExprParseError) String
 readStringUsingDest = \cases
-  d escaped [] -> d <| C @"[]" `lseq` Left (Ur $ UnexpectedEOFSString escaped Nothing)
-  d True ('n' : xs) -> case d <| C @":" of (dx, dxs) -> dx <|.. '\n' `lseq` readStringUsingDest dxs False xs -- TODO: add other escape chars
+  d escaped [] -> d & fill @'[] `lseq` Left (Ur $ UnexpectedEOFSString escaped Nothing)
+  d True ('n' : xs) -> case d & fill @'(:) of (dx, dxs) -> dx & fillLeaf '\n' `lseq` readStringUsingDest dxs False xs -- TODO: add other escape chars
   d False ('\\' : xs) -> readStringUsingDest d True xs
-  d False ('"' : xs) -> d <| C @"[]" `lseq` Right xs
-  d _ (x : xs) -> case d <| C @":" of (dx, dxs) -> dx <|.. x `lseq` readStringUsingDest dxs False xs
+  d False ('"' : xs) -> d & fill @'[] `lseq` Right xs
+  d _ (x : xs) -> case d & fill @'(:) of (dx, dxs) -> dx & fillLeaf x `lseq` readStringUsingDest dxs False xs
 
 parseUsingDest' :: forall r. (RegionContext r) => DSContext r %1 -> String -> Either (Ur SExprParseError) String
 parseUsingDest' = \cases
-  (DNotInSList d) [] -> d <|.. defaultSExpr `lseq` Left $ Ur UnexpectedEOFSExpr
-  (DInSList d) [] -> d <| C @"[]" `lseq` Left (Ur $ UnexpectedEOFSList Nothing)
+  (DNotInSList d) [] -> d & fillLeaf defaultSExpr `lseq` Left $ Ur UnexpectedEOFSExpr
+  (DInSList d) [] -> d & fill @'[] `lseq` Left (Ur $ UnexpectedEOFSList Nothing)
   ctx s@(x : xs) -> case x of
     '(' -> appendOrRet ctx contClosingParen xs
     ')' -> case ctx of
-      DInSList d -> d <| C @"[]" `lseq` Right xs
-      DNotInSList d -> d <|.. defaultSExpr `lseq` Left (Ur $ UnexpectedClosingParen s)
+      DInSList d -> d & fill @'[] `lseq` Right xs
+      DNotInSList d -> d & fillLeaf defaultSExpr `lseq` Left (Ur $ UnexpectedClosingParen s)
     '"' -> appendOrRet ctx contClosingQuote xs
     _ ->
       if isSpace x
@@ -164,25 +164,25 @@ parseUsingDest' = \cases
               Nothing -> appendOrRet ctx (contSymbol raw) remaining
     where
       contClosingParen :: Dest r SExpr %1 -> String -> Either (Ur SExprParseError) String
-      contClosingParen = (\dExpr -> parseUsingDest' (DInSList $ dExpr <| C @"SList"))
+      contClosingParen = (\dExpr -> parseUsingDest' (DInSList $ dExpr & fill @'SList))
       contClosingQuote :: Dest r SExpr %1 -> String -> Either (Ur SExprParseError) String
-      contClosingQuote = (\dExpr -> readStringUsingDest (dExpr <| C @"SString") False)
+      contClosingQuote = (\dExpr -> readStringUsingDest (dExpr & fill @'SString) False)
       contInt :: Int %1 -> Dest r SExpr %1 -> String -> Either (Ur SExprParseError) String
-      contInt = (\int dExpr -> dExpr <| C @"SInteger" <|.. int `lseq` Right)
+      contInt = (\int dExpr -> dExpr & fill @'SInteger & fillLeaf int `lseq` Right)
       contFloat :: Float %1 -> Dest r SExpr %1 -> String -> Either (Ur SExprParseError) String
-      contFloat = (\float dExpr -> dExpr <| C @"SFloat" <|.. float `lseq` Right)
+      contFloat = (\float dExpr -> dExpr & fill @'SFloat & fillLeaf float `lseq` Right)
       contSymbol :: String %1 -> Dest r SExpr %1 -> String -> Either (Ur SExprParseError) String
-      contSymbol = (\raw dExpr -> dExpr <| C @"SSymbol" <|.. raw `lseq` Right)
+      contSymbol = (\raw dExpr -> dExpr & fill @'SSymbol & fillLeaf raw `lseq` Right)
       splitOnSep :: String -> (String, String)
       splitOnSep = NonLinear.break (\c -> isSpace c || c `NonLinear.elem` ['(', ')', '"'])
       appendOrRet :: DSContext r %1 -> (Dest r SExpr %1 -> String -> Either (Ur SExprParseError) String) %1 -> String -> Either (Ur SExprParseError) String
       appendOrRet context f str = case context of
         DNotInSList d -> f d str
         DInSList d ->
-          case d <| C @":" of
+          case d & fill @'(:) of
             (dExpr, dRem) -> case f dExpr str of
               Right str' -> parseUsingDest' (DInSList dRem) str'
-              Left err -> dRem <| C @"[]" `lseq` Left err
+              Left err -> dRem & fill @'[] `lseq` Left err
 
 parseUsingDest :: String -> Either SExprParseError SExpr
 parseUsingDest str =
